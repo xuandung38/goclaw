@@ -108,6 +108,12 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 		case "response.output_item.done":
 			if event.Item != nil {
 				switch event.Item.Type {
+				case "message":
+					// Capture phase from assistant message items (gpt-5.3-codex).
+					if event.Item.Phase != "" {
+						result.Phase = event.Item.Phase
+					}
+
 				case "function_call":
 					acc := toolCalls[event.Item.ID]
 					if acc == nil {
@@ -247,13 +253,18 @@ func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[strin
 			}
 			// Also include text message if present
 			if m.Content != "" {
-				input = append(input, map[string]interface{}{
+				item := map[string]interface{}{
 					"type": "message",
 					"role": "assistant",
 					"content": []map[string]interface{}{
 						{"type": "output_text", "text": m.Content},
 					},
-				})
+				}
+				// Preserve phase metadata for gpt-5.3-codex (required for performance).
+				if m.Phase != "" {
+					item["phase"] = m.Phase
+				}
+				input = append(input, item)
 			}
 
 		case "tool":
@@ -352,6 +363,9 @@ func (p *CodexProvider) parseResponse(resp *responsesAPIResponse) *ChatResponse 
 					result.Content += c.Text
 				}
 			}
+			if item.Phase != "" {
+				result.Phase = item.Phase
+			}
 
 		case "function_call":
 			args := make(map[string]interface{})
@@ -418,6 +432,7 @@ type responsesItem struct {
 	ID        string               `json:"id"`
 	Type      string               `json:"type"` // "message", "function_call", "reasoning"
 	Role      string               `json:"role,omitempty"`
+	Phase     string               `json:"phase,omitempty"` // gpt-5.3-codex: "commentary" or "final_answer"
 	Content   []responsesContent   `json:"content,omitempty"`
 	CallID    string               `json:"call_id,omitempty"`
 	Name      string               `json:"name,omitempty"`
