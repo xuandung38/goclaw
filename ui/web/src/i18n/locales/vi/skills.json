@@ -14,6 +14,9 @@
     "actions": "Thao tác"
   },
   "noDescription": "Không có mô tả",
+  "visibility": {
+    "clickToCycle": "Nhấp để thay đổi hiển thị"
+  },
   "delete": {
     "title": "Xóa skill",
     "description": "Bạn có chắc chắn muốn xóa \"{{name}}\"? Hành động này không thể hoàn tác.",

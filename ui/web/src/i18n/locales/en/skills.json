@@ -14,6 +14,9 @@
     "actions": "Actions"
   },
   "noDescription": "No description",
+  "visibility": {
+    "clickToCycle": "Click to change visibility"
+  },
   "delete": {
     "title": "Delete Skill",
     "description": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
