@@ -90,20 +90,22 @@ skills/
     └── SKILL.md
 ```
 
-Each version is copied to: `<baseDir>/<slug>/<version>/`
-Example: `/app/data/skills/read-pdf/3/`
+Each version is copied to: `~/.goclaw/skills-store/<slug>/<version>/`
+Docker path: `/app/.goclaw/skills-store/<slug>/<version>/`
 
 ---
 
 ## 4. SKILL.md Frontmatter Format
 
+Follows the [Agent Skills specification](https://agentskills.io/specification.md).
+
 ```yaml
 ---
-name: Read PDF
-slug: read-pdf
-description: Extract and analyze text content from PDF files
-author: GoClaw Team
-tags: [pdf, document, extraction]
+name: read-pdf
+description: Extract and analyze text content from PDF files. Use when user mentions PDFs or document extraction.
+metadata:
+  author: GoClaw Team
+  version: "1.0"
 ---
 
 ## Instructions
@@ -115,11 +117,14 @@ Supported frontmatter fields:
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `name` | Yes | Display name |
-| `slug` | Yes | Unique identifier, kebab-case |
-| `description` | Yes | Short summary for agent search |
-| `author` | No | Shown in UI custom skills tab |
-| `tags` | No | Array, used for filtering |
+| `name` | Yes | Kebab-case, must match directory name — GoClaw uses dir name as slug (DB key) |
+| `description` | Yes | Short summary for agent search, max 1024 chars |
+| `license` | No | License identifier or file reference |
+| `compatibility` | No | Environment requirements |
+| `metadata` | No | Arbitrary key-value pairs (e.g. `author`, `version`) |
+| `allowed-tools` | No | Space-delimited tool patterns (experimental) |
+
+**Slug derivation:** GoClaw derives the slug from the **directory name**, not from frontmatter. The `name` field is used as display name fallback if it matches the slug; otherwise stored as-is.
 
 ---
 
