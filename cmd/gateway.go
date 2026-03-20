@@ -117,8 +117,8 @@ func runGateway() {
 		// Wire announce queue for batched subagent result delivery (matching TS debounce pattern)
 		announceQueue := tools.NewAnnounceQueue(1000, 20,
 			func(sessionKey string, items []tools.AnnounceQueueItem, meta tools.AnnounceMetadata) {
-				remainingActive := subagentMgr.CountRunningForParent(meta.ParentAgent)
-				content := tools.FormatBatchedAnnounce(items, remainingActive)
+				roster := subagentMgr.RosterForParent(meta.ParentAgent)
+				content := tools.FormatBatchedAnnounce(items, roster)
 				senderID := fmt.Sprintf("subagent:batch-%d", len(items))
 				label := items[0].Label
 				if len(items) > 1 {
@@ -153,9 +153,6 @@ func runGateway() {
 					Media:    batchMedia,
 				})
 			},
-			func(parentID string) int {
-				return subagentMgr.CountRunningForParent(parentID)
-			},
 		)
 		subagentMgr.SetAnnounceQueue(announceQueue)
 
@@ -187,6 +184,8 @@ func runGateway() {
 
 	// Message tool (send to channels)
 	toolsReg.Register(tools.NewMessageTool(workspace, agentCfg.RestrictToWorkspace))
+	// Group members tool (list members in group chats)
+	toolsReg.Register(tools.NewListGroupMembersTool())
 	slog.Info("session + message tools registered")
 
 	// Register legacy tool aliases (backward-compat names from policy.go).
@@ -328,6 +327,9 @@ func runGateway() {
 	if teamEventsH != nil {
 		server.SetTeamEventsHandler(teamEventsH)
 	}
+	if pgStores != nil && pgStores.Teams != nil {
+		server.SetTeamAttachmentsHandler(httpapi.NewTeamAttachmentsHandler(pgStores.Teams, cfg.Gateway.Token, dataDir))
+	}
 	if builtinToolsH != nil {
 		server.SetBuiltinToolsHandler(builtinToolsH)
 	}
@@ -384,7 +386,7 @@ func runGateway() {
 
 	// Workspace file serving endpoint — serves files by absolute path, auth-token protected.
 	// Supports media from any agent workspace (each agent has its own workspace from DB).
-	server.SetFilesHandler(httpapi.NewFilesHandler(cfg.Gateway.Token))
+	server.SetFilesHandler(httpapi.NewFilesHandler(cfg.Gateway.Token, workspace))
 
 	// Storage file management — browse/delete files under the resolved workspace directory.
 	// Uses GOCLAW_WORKSPACE (or default ~/.goclaw/workspace) so it works correctly
@@ -403,6 +405,7 @@ func runGateway() {
 	if pgStores.BuiltinTools != nil {
 		seedBuiltinTools(context.Background(), pgStores.BuiltinTools)
 		migrateBuiltinToolSettings(context.Background(), pgStores.BuiltinTools)
+		backfillWebFetchSettings(context.Background(), pgStores.BuiltinTools)
 		applyBuiltinToolDisables(context.Background(), pgStores.BuiltinTools, toolsReg)
 	}
 
@@ -429,6 +432,12 @@ func runGateway() {
 			cs.SetChannelSender(channelMgr.SendToChannel)
 		}
 	}
+	// Wire group member lister on list_group_members tool
+	if t, ok := toolsReg.Get("list_group_members"); ok {
+		if gl, ok := t.(tools.GroupMemberListerAware); ok {
+			gl.SetGroupMemberLister(channelMgr.ListGroupMembers)
+		}
+	}
 
 	// Load channel instances from DB.
 	var instanceLoader *channels.InstanceLoader
@@ -437,7 +446,7 @@ func runGateway() {
 		instanceLoader.SetProviderRegistry(providerRegistry)
 		instanceLoader.SetPendingCompactionConfig(cfg.Channels.PendingCompaction)
 		instanceLoader.RegisterFactory(channels.TypeTelegram, telegram.FactoryWithStores(pgStores.Agents, pgStores.ConfigPermissions, pgStores.Teams, pgStores.PendingMessages))
-		instanceLoader.RegisterFactory(channels.TypeDiscord, discord.FactoryWithPendingStore(pgStores.PendingMessages))
+		instanceLoader.RegisterFactory(channels.TypeDiscord, discord.FactoryWithStores(pgStores.Agents, pgStores.ConfigPermissions, pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeFeishu, feishu.FactoryWithPendingStore(pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeZaloOA, zalo.Factory)
 		instanceLoader.RegisterFactory(channels.TypeZaloPersonal, zalopersonal.FactoryWithPendingStore(pgStores.PendingMessages))
@@ -567,6 +576,14 @@ func runGateway() {
 				notifyType = "progress"
 			case protocol.EventTeamTaskCompleted:
 				notifyType = "completed"
+			case protocol.EventTeamTaskCommented:
+				notifyType = "commented"
+			case protocol.EventTeamTaskCreated:
+				// Only notify for human-created tasks (agent-created go through dispatch).
+				if payload.ActorType != "human" {
+					return
+				}
+				notifyType = "new_task"
 			default:
 				return
 			}
@@ -597,6 +614,14 @@ func runGateway() {
 				}
 			case "completed":
 				if !cfg.Completed {
+					return
+				}
+			case "commented":
+				if !cfg.Commented {
+					return
+				}
+			case "new_task":
+				if !cfg.NewTask {
 					return
 				}
 			}
@@ -649,6 +674,14 @@ func runGateway() {
 					reason = reason[:200] + "..."
 				}
 				content = fmt.Sprintf("❌ Task #%d \"%s\" failed: %s", payload.TaskNumber, payload.Subject, reason)
+			case protocol.EventTeamTaskCommented:
+				actor := payload.ActorID
+				if actor == "" {
+					actor = "unknown"
+				}
+				content = fmt.Sprintf("💬 Task #%d \"%s\": comment from %s", payload.TaskNumber, payload.Subject, actor)
+			case protocol.EventTeamTaskCreated:
+				content = fmt.Sprintf("📋 New task #%d \"%s\" created", payload.TaskNumber, payload.Subject)
 			}
 
 			// In leader mode, require resolved agent key for routing.
