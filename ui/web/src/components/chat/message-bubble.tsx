@@ -3,6 +3,9 @@ import { MessageContent } from "./message-content";
 import { ThinkingBlock } from "./thinking-block";
 import { ToolCallCard } from "./tool-call-card";
 import { BlockReplyBubble } from "./block-reply-bubble";
+import { MediaGallery } from "./media-gallery";
+import { useUiStore } from "@/stores/use-ui-store";
+import { resolveTimezone } from "@/lib/format";
 import type { ChatMessage } from "@/types/chat";
 
 interface MessageBubbleProps {
@@ -10,6 +13,7 @@ interface MessageBubbleProps {
 }
 
 export function MessageBubble({ message }: MessageBubbleProps) {
+  const timezone = useUiStore((s) => s.timezone);
   const isUser = message.role === "user";
   const isTool = message.role === "tool";
 
@@ -47,11 +51,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           ))}
         </div>
       ) : (
-        /* Normal message bubble */
-        <div className={`max-w-[85%] rounded-lg px-4 py-2 ${
+        /* Normal message bubble — assistant uses full width, user capped at 85% */
+        <div className={`rounded-lg px-4 py-2 ${
           isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-card text-card-foreground border border-border shadow-sm"
+            ? "max-w-[85%] bg-card text-card-foreground border border-border shadow-sm border-r-2 border-r-accent-foreground"
+            : "flex-1 min-w-0 bg-card text-card-foreground border border-border shadow-sm"
         }`}>
           {hasThinking && (
             <div className="mb-2">
@@ -66,9 +70,18 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             </div>
           )}
           <MessageContent content={message.content} role={message.role} />
+          {message.mediaItems && message.mediaItems.length > 0 && (
+            <div className="mt-2">
+              <MediaGallery items={message.mediaItems} />
+            </div>
+          )}
           {message.timestamp && (
-            <div className={`mt-1 text-[10px] ${isUser ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-              {new Date(message.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            <div className="mt-1 text-[10px] text-muted-foreground">
+              {new Intl.DateTimeFormat([], {
+                timeZone: resolveTimezone(timezone),
+                hour: "numeric",
+                minute: "2-digit",
+              }).format(new Date(message.timestamp))}
             </div>
           )}
         </div>

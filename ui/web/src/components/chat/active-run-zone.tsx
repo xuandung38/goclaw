@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Bot } from "lucide-react";
 import { ActivityIndicator } from "./activity-indicator";
 import { BlockReplyBubble } from "./block-reply-bubble";
@@ -15,7 +16,7 @@ interface ActiveRunZoneProps {
   blockReplies: ChatMessage[];
 }
 
-export function ActiveRunZone({
+export const ActiveRunZone = memo(function ActiveRunZone({
   isRunning,
   activity,
   thinkingText,
@@ -53,7 +54,7 @@ export function ActiveRunZone({
 
         {/* Streaming text: wrap in bubble matching MessageBubble's assistant style */}
         {(thinkingText !== null || streamText !== null) && (
-          <div className="max-w-[85%] rounded-lg px-4 py-2 bg-card text-card-foreground border border-border shadow-sm">
+          <div className="flex-1 min-w-0 rounded-lg px-4 py-2 bg-card text-card-foreground border border-border shadow-sm">
             {thinkingText !== null && (
               <div className={streamText !== null ? "mb-2" : ""}>
                 <ThinkingBlock text={thinkingText} isStreaming={isRunning && streamText === null} />
@@ -63,10 +64,10 @@ export function ActiveRunZone({
           </div>
         )}
 
-        {isRunning && (
+        {(isRunning || activity?.phase === "leader_processing") && (
           <ActivityIndicator activity={activity} isRunning={isRunning} />
         )}
       </div>
     </div>
   );
-}
+});

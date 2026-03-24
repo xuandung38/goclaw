@@ -82,7 +82,7 @@ export function MemoryPage() {
     if (!deleteTarget) return;
     setDeleteLoading(true);
     try {
-      await deleteDocument(deleteTarget.path, deleteTarget.user_id);
+      await deleteDocument(deleteTarget.path, deleteTarget.user_id, deleteTarget.agent_id);
       setDeleteTarget(null);
     } finally {
       setDeleteLoading(false);
@@ -103,7 +103,7 @@ export function MemoryPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6 pb-10">
       <PageHeader
         title={t("title")}
         description={t("description")}
